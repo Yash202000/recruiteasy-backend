@@ -1,0 +1,142 @@
+version: '3.8'
+
+
+# Settings and configurations that are common for all containers
+x-minio-common: &minio-common
+  image: quay.io/minio/minio:latest
+  command: server --console-address ":9090" /mnt/data
+  ports:
+    - "9000:9000"
+    - "9090:9090"
+  environment:
+    MINIO_ROOT_USER: minioadmin
+    MINIO_ROOT_PASSWORD: minioadmin
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+    interval: 30s
+    timeout: 20s
+    retries: 3
+
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml --node-ip 192.168.31.78
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    ports:
+      - "7880:7880"       # HTTP
+      - "7881:7881"       # TCP (for WebRTC signaling)
+      - "7882:7882/udp"   # UDP (for media)
+      
+  redis:
+    image: redis:7-alpine
+    command: redis-server /etc/redis.conf
+    volumes:
+      - ./redis.conf:/etc/redis.conf
+    ports:
+      - "6379:6379"       # Redis default port
+
+
+  minio1:
+    <<: *minio-common
+    hostname: minio1
+    volumes:
+      - type: bind
+        source: /mnt/data/compose
+        target: /mnt/data
+      - type: bind
+        source: /etc/default/minio
+        target: /etc/config.env
+  
+
+  db:
+    image: postgres:15
+    restart: always
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 10s, timeout: 5s, retries: 5 }
+    ports:
+      - "5432:5432"
+    volumes:
+      - "dbdata:/var/lib/postgresql/data"
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+        
+  # pgadmin:
+  #   image: dpage/pgadmin4
+  #   container_name: pgadmin4_container
+  #   restart: always
+  #   ports:
+  #     - "8888:80"
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: yashpanchwatkar@gmail.com
+  #     PGADMIN_DEFAULT_PASSWORD: password
+  #   volumes:
+  #     - pgadmin-data:/var/lib/pgadmin
+    
+  
+  # opensearch-node1:
+  #   image: opensearchproject/opensearch:latest
+  #   container_name: opensearch-data-node
+  #   environment:
+  #     - cluster.name=opensearch-cluster 
+  #     - node.name=opensearch-node1
+  #     - discovery.seed_hosts=opensearch-node1,opensearch-node2 
+  #     - cluster.initial_cluster_manager_nodes=opensearch-node1 
+  #     - bootstrap.memory_lock=true 
+  #     - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" 
+  #     - "DISABLE_INSTALL_DEMO_CONFIG=true" 
+  #     - "DISABLE_SECURITY_PLUGIN=true" 
+  #   ulimits:
+  #     memlock:
+  #       soft: -1 
+  #       hard: -1
+  #     nofile:
+  #       soft: 65536 
+  #       hard: 65536
+  #   volumes:
+  #     - opensearch-data1:/usr/share/opensearch/data 
+  #   ports:
+  #     - 9200:9200 
+  #     - 9600:9600 
+     
+
+  # opensearch-node2:
+  #   image: opensearchproject/opensearch:latest
+  #   container_name: opensearch-ml-node
+  #   environment:
+  #     - cluster.name=opensearch-cluster 
+  #     - node.name=opensearch-node2 
+  #     - discovery.seed_hosts=opensearch-node1,opensearch-node2 
+  #     - cluster.initial_cluster_manager_nodes=opensearch-node1 
+  #     - bootstrap.memory_lock=true 
+  #     - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" 
+  #     - "DISABLE_INSTALL_DEMO_CONFIG=true" 
+  #     - "DISABLE_SECURITY_PLUGIN=true" 
+  #   ulimits:
+  #     memlock:
+  #       soft: -1 
+  #       hard: -1
+  #     nofile:
+  #       soft: 65536 
+  #       hard: 65536
+  #   volumes:
+  #     - opensearch-data2:/usr/share/opensearch/data 
+    
+  
+  # opensearch-dashboards:
+  #   image: opensearchproject/opensearch-dashboards:latest
+  #   container_name: opensearch-dashboards
+  #   ports:
+  #     - 5601:5601 
+  #   expose:
+  #     - "5601" 
+  #   environment:
+  #     - 'OPENSEARCH_HOSTS=["http://opensearch-node1:9200"]'
+  #     - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true" 
+    
+volumes:
+  dbdata:
+  # pgadmin-data:
+  # opensearch-data1:
+  # opensearch-data2:

@@ -1,0 +1,17 @@
+log_level: debug
+api_key: API2CkexsWtNdB5 
+api_secret: 35pzHzV9pNXOSzMyCJHniWKrnyfu1hKU8TBKCz7r0yU
+ws_url: ws://192.168.31.78:7880
+insecure: true
+redis:
+  address: 192.168.31.78:6379
+
+
+
+# File upload config - only one of the following.
+s3:
+  access_key: Tq7xJeOwGqbYbzLdjH1Z
+  secret: 7AxrHdw6OTb4N7OneDMQYIHUU9gLVoTtvmWCHzUD
+  region: us-east-1
+  bucket: livekit-egress
+  endpoint: http://192.168.31.78:9000

@@ -1,0 +1,19 @@
+{
+  "room_name": "tv2g-5228",
+  "layout": "grid",
+  "preset": "H264_720P_30",
+  "audio_only": false,
+  "file_outputs": [
+    {
+      "filepath": "test-recording.mp4",
+      "s3": {
+        "access_key": "Tq7xJeOwGqbYbzLdjH1Z",
+        "secret": "7AxrHdw6OTb4N7OneDMQYIHUU9gLVoTtvmWCHzUD",
+	      "region": "us-east-1",
+        "bucket": "livekit-egress",
+        "endpoint": "http://192.168.31.78:9000",
+        "force_path_style": true
+      }
+    }
+  ]
+}

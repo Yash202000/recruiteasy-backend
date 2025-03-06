@@ -1,0 +1,8 @@
+fastapi
+SQLAlchemy
+python-dotenv
+python-jose
+passlib
+uvicorn
+psycopg2
+livekit-api

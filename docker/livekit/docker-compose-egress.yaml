@@ -1,0 +1,12 @@
+version: '3.8'
+
+
+services:
+  egress:
+    image: livekit/egress:latest
+    environment:
+      - EGRESS_CONFIG_FILE=/out/config.yaml
+    cap_add:
+      - SYS_ADMIN
+    volumes:
+      - ./livekit-egress:/out
