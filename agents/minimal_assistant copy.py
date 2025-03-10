@@ -15,8 +15,6 @@ from livekit.agents import (
     JobContext,
     JobProcess,
     WorkerOptions,
-    WorkerType,
-    WorkerPermissions,
     cli,
     llm,
     metrics,
@@ -27,20 +25,21 @@ import elevenlabs
 import boto3
 import aiofiles
 import redis
-import cv2
+
 
 
 # Redis connection
 redis_client = redis.StrictRedis(host='axionic2.discretal.com', port=6379, db=0, decode_responses=True)
 
-current_video_task = None  # Store running video task
-stop_video_event = asyncio.Event()  # Event to signal when to stop looping
-
 
 load_dotenv()
 logger = logging.getLogger("AI-Interview-assistant")
 
+
+# Set the video frame dimensions
 WIDTH, HEIGHT = 640, 480
+
+
 
 def get_redis_client():
     try:
@@ -95,7 +94,6 @@ async def start_recording(roomName: str):
     await lkapi.egress.start_room_composite_egress(req)
     
 
-
 def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
 
@@ -125,6 +123,28 @@ async def entrypoint(ctx: JobContext):
 
     # await start_recording(ctx.room.name)
 
+    # Embedding profile data into the initial context
+    # profile_text = (
+    #     f"The candidate's profile:\n"
+    #     f"- Name: {profile_data.get('username', 'Unknown')}\n"
+    #     f"- Bio: {profile_data['job_seeker_profile'].get('bio', 'No bio provided')}\n"
+    #     f"- Skills: {', '.join(profile_data['job_seeker_profile'].get('skills', [])) if profile_data['job_seeker_profile'].get('skills') else 'No skills listed'}\n"
+    #     f"- Work Experience: {profile_data['job_seeker_profile'].get('work_experience', 'No work experience listed')}\n"
+    #     f"- Education: {profile_data['job_seeker_profile'].get('education', 'No education details listed')}\n"
+    # )
+
+
+
+    # initial_ctx = llm.ChatContext().append(
+    #     role="system",
+    #     text=(
+    #         "You are an AI interviewer created by Yash Panchwatkar, specialized in Human resource management"
+    #         "Your task is to ask precise, relevant, and challenging questions on the topic given below "
+    #         "interview topic and description and difficulty which is set below. Avoid providing unnecessary details and ensure your responses "
+    #         "are concise and focused on assessing the candidate's skills effectively. So only ask questions.\n\n"
+    #         f"{interview}"
+    #     ),
+    # )
 
     initial_ctx = llm.ChatContext().append(
         role="system",
@@ -134,7 +154,32 @@ async def entrypoint(ctx: JobContext):
             "You are voice assistant you will be cheerful and very cooperative."
         ),
     )
- 
+
+    # initial_ctx = llm.ChatContext().append(
+    #     role="system",
+    #     text=(
+    #         "You are an AI interviewer created by Yash Panchwatkar, specialized in flutter Your name is Axionic "
+    #         "You should use short and concise responses, avoiding unpronounceable punctuation."
+    #         "You are voice Interviewer specialized in flutter and software development interviews"
+    #         "Your task is to ask precise, relevant, and challenging questions on programming, system design "
+    #         "based on the candidate's background Avoid providing unnecessary details and ensure your responses "
+    #         "are concise and focused on assessing the candidate's skills effectively. So only ask questions.\n\n"        
+    #     ),
+    # )
+
+
+    # initial_ctx = llm.ChatContext().append(
+    #     role="system",
+    #     text=(
+    #         "You are an AI interviewer created by Yash Panchwatkar, specialized in software development interviews. "
+    #         "Your task is to ask precise, relevant, and challenging questions on programming, system design, algorithms, "
+    #         "and data structures based on the candidate's background and the interview topic and description and difficulty which is set below. Avoid providing unnecessary details and ensure your responses "
+    #         "are concise and focused on assessing the candidate's skills effectively. So only ask questions.\n\n"
+    #         f"{profile_text}\n"
+    #         f"{interview}"
+    #     ),
+    # )
+    
 
     dg_model = "nova-2-general"
     if participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
@@ -175,42 +220,8 @@ async def entrypoint(ctx: JobContext):
         if msg.message:
             asyncio.create_task(answer_from_text(msg.message))
 
-    async def _draw_video(videopath: str):
-        cap = cv2.VideoCapture(videopath)
-
-        if not cap.isOpened():
-            logger.error("Error: Cannot open video file")
-            return
-
-        logger.info("Published video track", extra={"track_sid": publication.sid})
-
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            frame = cv2.resize(frame, (WIDTH, HEIGHT))
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-            argb_frame = bytearray(frame.tobytes())
-
-            video_frame = rtc.VideoFrame(WIDTH, HEIGHT, rtc.VideoBufferType.RGBA, argb_frame)
-            source.capture_frame(video_frame)
-
-            await asyncio.sleep(1 / 25)  # Adjust according to your video FPS
-
-        cap.release()
-
-    async def switch_video(video_path: str):
-        global current_video_task
-
-        # Cancel the running video task if it exists
-        if current_video_task:
-            current_video_task.cancel()
-
-        # Start new video playback immediately
-        current_video_task = asyncio.create_task(_draw_video(video_path))
-
-
+    
+    
 
     @agent.on("user_speech_committed")
     def on_user_speech_committed(msg: llm.ChatMessage):
@@ -221,28 +232,11 @@ async def entrypoint(ctx: JobContext):
                 "[image]" if isinstance(x, llm.ChatImage) else x for x in msg
             )
         log_queue.put_nowait(f"[{datetime.datetime.now()}] USER: {msg.content}\n")
-        
-        # video render
-        logger.debug("AI started speaking - switching video to default.mp4")
-        asyncio.create_task(switch_video("agents/developer-int.mp4"))
-
-
 
     @agent.on("agent_speech_committed")
     def on_agent_speech_committed(msg: llm.ChatMessage):
         logger.info("agent_speech_committed")
         log_queue.put_nowait(f"[{datetime.datetime.now()}] AGENT: {msg.content}\n")
-        
-
-     # inspect the current value of the attribute
-    language = participant.attributes.get("user.language")
-
-    # listen to when the attribute is changed
-    @ctx.room.on("participant_attributes_changed")
-    def on_participant_attributes_changed(changed_attrs: dict[str, str], p: rtc.Participant):
-        if p == participant:
-            language = p.attributes.get("user.language")
-            print(f"participant {p.identity} changed language to {language}")
 
     log_queue = asyncio.Queue()
 
@@ -255,6 +249,20 @@ async def entrypoint(ctx: JobContext):
         aws_secret_access_key: str = None,
         region_name: str = "us-east-1"
     ):
+        """
+        Uploads a file to S3 with optional access and secret keys.
+        
+        Args:
+            file_path (str): Local path of the file to upload.
+            bucket_name (str): Name of the S3 bucket.
+            object_key (str): Key (path) in the S3 bucket.
+            aws_access_key_id (str, optional): AWS access key ID.
+            aws_secret_access_key (str, optional): AWS secret access key.
+            aws_session_token (str, optional): AWS session token for temporary credentials.
+            region_name (str, optional): AWS region (default is 'us-east-1').
+        """
+        # Create S3 client with custom credentials if provided
+        
         s3_client = boto3.resource(
             "s3",
             endpoint_url=endpoint_url,
@@ -262,9 +270,11 @@ async def entrypoint(ctx: JobContext):
             aws_secret_access_key=aws_secret_access_key,
             region_name=region_name,
         )
+        
         try:
             s3_client.Bucket(bucket_name).upload_file(file_path,object_key)
-            s3_client.upload_file(Filename=file_path, Bucket=bucket_name, Key=object_key)
+            
+            # s3_client.upload_file(Filename=file_path, Bucket=bucket_name, Key=object_key)
             
         except Exception as e:
             print(e)
@@ -294,7 +304,7 @@ async def entrypoint(ctx: JobContext):
 
     async def finish_queue():
         log_queue.put_nowait(None)
-        # await write_task
+        await write_task
         summary = usage_collector.get_summary()
         logger.info(f"Usage: ${summary}")
 
@@ -302,66 +312,59 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(finish_queue)
 
-    
-
     # await agent.say(f"Hello {participant.identity}, welcome to the Axionic AI interview. This interview will consist of basic questions about your background and the high-level skills you listed in your application. Please ensure you minimize long pauses, as this may lead to the interview being cut off prematurely. Are you ready to start the interview?", allow_interruptions=False)
-    
+    await agent.say(f"Hello {participant.identity}, How can I help you?", allow_interruptions=False)
+
+
     source = rtc.VideoSource(WIDTH, HEIGHT)
     track = rtc.LocalVideoTrack.create_video_track("single-color", source)
     options = rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_CAMERA)
-    
     publication = await room.local_participant.publish_track(track, options)
     logging.info("published track", extra={"track_sid": publication.sid})
 
 
     async def _draw_image():
+        # Load the logo or image
         logo_path = "agents/leaderlogo.png"
-        logo = Image.open(logo_path).convert("RGBA")
+        logo = Image.open(logo_path).convert("RGBA")  # Ensure image is in RGBA format
+
+        # Calculate the size for the logo (e.g., half the width and height of the frame)
         logo_width = WIDTH // 2
         logo_height = HEIGHT // 2
         logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
-        frame_image = Image.new("RGBA", (WIDTH, HEIGHT), (30, 30, 30, 255))
+
+        # Create a blank RGBA canvas for the frame
+        frame_image = Image.new("RGBA", (WIDTH, HEIGHT), (30, 30, 30, 255))  # Gray background
+
+        # Calculate position to center the logo
         x = (WIDTH - logo_width) // 2
         y = (HEIGHT - logo_height) // 2
-        frame_image.paste(logo, (x, y), logo)
+
+        # Paste the logo onto the center of the frame
+        frame_image.paste(logo, (x, y), logo)  # Use the logo as its own mask for transparency
+
+        # Convert the frame image to raw bytes
         argb_frame = bytearray(frame_image.tobytes())
 
         while True:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.1)  # 100ms
+
+            # Create a video frame with the logo/image
             frame = rtc.VideoFrame(WIDTH, HEIGHT, rtc.VideoBufferType.RGBA, argb_frame)
             source.capture_frame(frame)
 
-    # await _draw_image()
-
-
-    asyncio.create_task(switch_video("agents/developer-int.mp4"))
-    await agent.say(
-        f"Hello {participant.identity}, I am John Carter your AI Assistant. Nice to meet you! How can I help you?", 
-        allow_interruptions=False
-    )
-    current_video_task.cancel()
-
-
-    # await _draw_video()
-
+    await _draw_image()
 
     
 
-# """Set agent_name to enable explicit dispatch. When explicit dispatch is enabled, jobs will not be dispatched to rooms automatically. Instead, you can either specify the agent(s) to be dispatched in the end-user's token, or use the AgentDispatch.createDispatch API"""
+
+
 
 if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             prewarm_fnc=prewarm,
-            agent_name="recrutingAgent",
-            permissions=WorkerPermissions(
-                can_publish = True,
-                can_subscribe = True,
-                can_publish_data = True,
-                can_update_metadata = True,
-                hidden= False
-            ),
-            worker_type=WorkerType.ROOM,
+            agent_name="aiagent"  # """Set agent_name to enable explicit dispatch. When explicit dispatch is enabled, jobs will not be dispatched to rooms automatically. Instead, you can either specify the agent(s) to be dispatched in the end-user's token, or use the AgentDispatch.createDispatch API"""
         ),
     )

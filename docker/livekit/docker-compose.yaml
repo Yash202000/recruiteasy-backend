@@ -2,52 +2,52 @@ version: '3.8'
 
 
 # Settings and configurations that are common for all containers
-x-minio-common: &minio-common
-  image: quay.io/minio/minio:latest
-  command: server --console-address ":9090" /mnt/data
-  ports:
-    - "9000:9000"
-    - "9090:9090"
-  environment:
-    MINIO_ROOT_USER: minioadmin
-    MINIO_ROOT_PASSWORD: minioadmin
-  healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-    interval: 30s
-    timeout: 20s
-    retries: 3
+# x-minio-common: &minio-common
+#   image: quay.io/minio/minio:latest
+#   command: server --console-address ":9090" /mnt/data
+#   ports:
+#     - "9000:9000"
+#     - "9090:9090"
+#   environment:
+#     MINIO_ROOT_USER: minioadmin
+#     MINIO_ROOT_PASSWORD: minioadmin
+#   healthcheck:
+#     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+#     interval: 30s
+#     timeout: 20s
+#     retries: 3
 
 
 services:
-  livekit:
-    image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml --node-ip 192.168.31.78
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml
-    ports:
-      - "7880:7880"       # HTTP
-      - "7881:7881"       # TCP (for WebRTC signaling)
-      - "7882:7882/udp"   # UDP (for media)
+  # livekit:
+  #   image: livekit/livekit-server:latest
+  #   command: --config /etc/livekit.yaml --node-ip 192.168.31.78
+  #   volumes:
+  #     - ./livekit.yaml:/etc/livekit.yaml
+  #   ports:
+  #     - "7880:7880"       # HTTP
+  #     - "7881:7881"       # TCP (for WebRTC signaling)
+  #     - "7882:7882/udp"   # UDP (for media)
       
-  redis:
-    image: redis:7-alpine
-    command: redis-server /etc/redis.conf
-    volumes:
-      - ./redis.conf:/etc/redis.conf
-    ports:
-      - "6379:6379"       # Redis default port
+  # redis:
+  #   image: redis:7-alpine
+  #   command: redis-server /etc/redis.conf
+  #   volumes:
+  #     - ./redis.conf:/etc/redis.conf
+  #   ports:
+  #     - "6379:6379"       # Redis default port
 
 
-  minio1:
-    <<: *minio-common
-    hostname: minio1
-    volumes:
-      - type: bind
-        source: /mnt/data/compose
-        target: /mnt/data
-      - type: bind
-        source: /etc/default/minio
-        target: /etc/config.env
+  # minio1:
+  #   <<: *minio-common
+  #   hostname: minio1
+  #   volumes:
+  #     - type: bind
+  #       source: /mnt/data/compose
+  #       target: /mnt/data
+  #     - type: bind
+  #       source: /etc/default/minio
+  #       target: /etc/config.env
   
 
   db:
