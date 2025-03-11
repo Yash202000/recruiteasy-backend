@@ -32,10 +32,10 @@ router = APIRouter()
 
 s3_client = boto3.client(
             "s3",
-            endpoint_url="http://192.168.31.78:9000",
-            aws_access_key_id="Tq7xJeOwGqbYbzLdjH1Z",
-            aws_secret_access_key="7AxrHdw6OTb4N7OneDMQYIHUU9gLVoTtvmWCHzUD",
-            region_name="us-east-1"
+            endpoint_url=os.environ.get("STORAGE_ENDPOINT"),
+            aws_access_key_id=os.environ.get("STORAGE_ACCESS_KEY"),
+            aws_secret_access_key=os.environ.get("STORAGE_SECRET_KEY"),
+            region_name=os.environ.get("STORAGE_REGION")
         )
         
 
@@ -184,12 +184,12 @@ async def analyze_room_log(room_id: str, db: Session = Depends(get_db)):
         .filter(UserRoom.room_id == room_id)
         .first()
     )
-    
+
     if not room:
         raise HTTPException(status_code=404, detail="No room found for the user")
 
     # S3 bucket configuration
-    bucket_name = "livekit-egress"
+    bucket_name = os.environ.get("BUCKET_NAME")
     folder_prefix = f"{room.id}/"
     
     try:
@@ -214,16 +214,14 @@ async def analyze_room_log(room_id: str, db: Session = Depends(get_db)):
 
         prompt = """
        Analyze the following conversation log and generate a detailed feedback report.
-Answer Feedback: Analyze the user's response in detail, focusing on multiple factors but you should include only three major points which is much needed 
+        Answer Feedback: Analyze the user's response in detail, focusing on multiple factors but you should include only three major points which is much needed 
 
-Overall Feedback: Summarize the quality of the response as one of the following: excellent, good, needs improvement, bad, or worst.
-Response Format:
- '"Keypoint which user lags": "<Feedback>" 
- "keypoint which user lags": "<Feedback>", 
- "Avoid Redundancy": "<Feedback>" },
-"overall_feedback": "<Overall assessment>"}
-
-
+        Overall Feedback: Summarize the quality of the response as one of the following: excellent, good, needs improvement, bad, or worst.
+        Response Format:
+        '"Keypoint which user lags": "<Feedback>" 
+        "keypoint which user lags": "<Feedback>", 
+        "Avoid Redundancy": "<Feedback>" },
+        "overall_feedback": "<Overall assessment>"}
         """
         
         for line in log_file_content.splitlines():

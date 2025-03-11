@@ -9,7 +9,7 @@ import asyncio
 from livekit import api
 
 
-room_name = "test_room"
+room_name = "xtxc-n971-cctb"
 agent_name = "recrutingAgent"
 
 # def create_token_with_agent_dispatch() -> str:
